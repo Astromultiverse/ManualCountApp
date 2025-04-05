@@ -1,1 +1,175 @@
 
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Credit Card EMI Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #f1f1f1;
+      padding: 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: #1e1e1e;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background: #2c2c2c;
+      color: white;
+      box-sizing: border-box;
+    }
+    .results {
+      margin-top: 20px;
+      padding: 15px;
+      background: #2a2a2a;
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    .error { color: red; }
+    canvas { margin-top: 20px; max-width: 100%; }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media screen and (max-width: 600px) {
+      .buttons button {
+        flex: 1 1 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2>Credit Card EMI Calculator</h2>
+  <label>Principal Amount (INR):</label>
+  <input type="number" id="principal" value="51285" /><label>Interest Rate (% annual):</label> <input type="number" id="interest" value="18" />
+
+<label>Processing Fee (% one-time):</label> <input type="number" id="processing" value="2" />
+
+<label>GST (%):</label> <input type="number" id="gst" value="18" />
+
+<button onclick="calculateEMI()">Calculate</button> <button onclick="resetForm()">Reset</button>
+
+  <div class="buttons">
+    <button onclick="exportToPDF()">Export to PDF</button>
+    <button onclick="exportToCSV()">Export to CSV</button>
+  </div>  <div id="error" class="error"></div>
+  <div class="results" id="results"></div>
+  <canvas id="chart" height="200"></canvas>
+</div><script>
+function calculateEMI() {
+  const P = parseFloat(document.getElementById("principal").value);
+  const annualRate = parseFloat(document.getElementById("interest").value);
+  const procFeePercent = parseFloat(document.getElementById("processing").value);
+  const gstRate = parseFloat(document.getElementById("gst").value);
+  const tenures = [3, 6, 9, 12, 18, 24, 30, 36];
+
+  if (isNaN(P) || isNaN(annualRate) || isNaN(procFeePercent) || isNaN(gstRate)) {
+    document.getElementById("error").textContent = "Please enter valid inputs in all fields.";
+    return;
+  } else {
+    document.getElementById("error").textContent = "";
+  }
+
+  let outputHTML = "";
+  const chartLabels = [], chartData = [];
+  window.exportData = [];
+
+  tenures.forEach(n => {
+    const r = annualRate / 12 / 100;
+    const emi = (P * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    const totalRepayment = emi * n;
+    const interest = totalRepayment - P;
+    const procFee = (P * procFeePercent) / 100;
+    const gstOnProcFee = (procFee * gstRate) / 100;
+    const gstOnInterest = (interest * gstRate) / 100;
+    const totalGST = gstOnProcFee + gstOnInterest;
+    const totalCost = totalRepayment + procFee + totalGST;
+    const totalExtras = totalCost - P;
+
+    outputHTML += `
+      <strong>Results for ${n}-Month EMI:</strong><br>
+      Monthly EMI: <strong>₹${emi.toFixed(2)}</strong><br>
+      Total Interest: ₹${interest.toFixed(2)}<br>
+      Processing Fee: ₹${procFee.toFixed(2)}<br>
+      GST on Processing Fee: ₹${gstOnProcFee.toFixed(2)}<br>
+      GST on Interest: ₹${gstOnInterest.toFixed(2)}<br>
+      Total GST: ₹${totalGST.toFixed(2)}<br>
+      <strong>Total Amount Payable: ₹${totalCost.toFixed(2)}</strong><br>
+      <span style="color:lightgreen">Total Extra Paid Over Principal: ₹${totalExtras.toFixed(2)}</span><br><br>
+    `;
+
+    chartLabels.push(`${n}M`);
+    chartData.push(totalCost.toFixed(2));
+    window.exportData.push({
+      Tenure: `${n} Months`, EMI: emi.toFixed(2), Interest: interest.toFixed(2),
+      Processing_Fee: procFee.toFixed(2), GST_on_Fee: gstOnProcFee.toFixed(2),
+      GST_on_Interest: gstOnInterest.toFixed(2), Total_GST: totalGST.toFixed(2),
+      Total_Payable: totalCost.toFixed(2), Extra_Cost: totalExtras.toFixed(2)
+    });
+  });
+
+  document.getElementById("results").innerHTML = outputHTML;
+
+  const ctx = document.getElementById("chart").getContext("2d");
+  if (window.myChart) window.myChart.destroy();
+  window.myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: chartLabels,
+      datasets: [{
+        label: 'Total Amount Payable (INR)',
+        data: chartData,
+        backgroundColor: '#03a9f4'
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+}
+
+function resetForm() {
+  document.getElementById("principal").value = "";
+  document.getElementById("interest").value = "";
+  document.getElementById("processing").value = "";
+  document.getElementById("gst").value = "";
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("error").textContent = "";
+  if (window.myChart) window.myChart.destroy();
+}
+
+function exportToCSV() {
+  const ws = XLSX.utils.json_to_sheet(window.exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "EMI_Data");
+  XLSX.writeFile(wb, "EMI_Calculator.csv");
+}
+
+function exportToPDF() {
+  const content = document.getElementById("results").innerHTML;
+  const blob = new Blob([content], { type: 'text/html' });
+  saveAs(blob, "EMI_Calculator.html");
+}
+</script></body>
+</html>
